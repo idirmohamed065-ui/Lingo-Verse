@@ -1,0 +1,59 @@
+import { Routes, Route } from 'react-router-dom';
+import { useAuthStore } from './stores/authStore';
+import Layout from './components/Layout';
+import Home from './pages/Home';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Dashboard from './pages/Dashboard';
+import Learn from './pages/Learn';
+import Lesson from './pages/Lesson';
+import AIChat from './pages/AIChat';
+import Pronunciation from './pages/Pronunciation';
+import Social from './pages/Social';
+import Friends from './pages/Friends';
+import Profile from './pages/Profile';
+import Leaderboard from './pages/Leaderboard';
+import Achievements from './pages/Achievements';
+import Settings from './pages/Settings';
+import Admin from './pages/Admin';
+import Subscription from './pages/Subscription';
+import ProtectedRoute from './components/ProtectedRoute';
+import AdminRoute from './components/AdminRoute';
+
+function App() {
+  const { initialized } = useAuthStore();
+
+  if (!initialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <Routes>
+      <Route path="/" element={<Layout />}>
+        <Route index element={<Home />} />
+        <Route path="login" element={<Login />} />
+        <Route path="register" element={<Register />} />
+        <Route path="dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="learn" element={<ProtectedRoute><Learn /></ProtectedRoute>} />
+        <Route path="learn/:courseId" element={<ProtectedRoute><Learn /></ProtectedRoute>} />
+        <Route path="lesson/:lessonId" element={<ProtectedRoute><Lesson /></ProtectedRoute>} />
+        <Route path="ai-tutor" element={<ProtectedRoute><AIChat /></ProtectedRoute>} />
+        <Route path="pronunciation" element={<ProtectedRoute><Pronunciation /></ProtectedRoute>} />
+        <Route path="social" element={<ProtectedRoute><Social /></ProtectedRoute>} />
+        <Route path="friends" element={<ProtectedRoute><Friends /></ProtectedRoute>} />
+        <Route path="profile/:userId?" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="leaderboard" element={<ProtectedRoute><Leaderboard /></ProtectedRoute>} />
+        <Route path="achievements" element={<ProtectedRoute><Achievements /></ProtectedRoute>} />
+        <Route path="settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="subscription" element={<ProtectedRoute><Subscription /></ProtectedRoute>} />
+        <Route path="admin" element={<AdminRoute><Admin /></AdminRoute>} />
+      </Route>
+    </Routes>
+  );
+}
+
+export default App;

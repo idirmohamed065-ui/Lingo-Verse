@@ -1,0 +1,58 @@
+{
+  "name": "lingoverse",
+  "version": "2.0.0",
+  "description": "LingoVerse - AI-powered language learning platform",
+  "main": "backend/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "nodemon backend/server.js",
+    "db:setup": "node backend/scripts/setup.js",
+    "db:migrate": "node backend/scripts/migrate.js",
+    "db:seed": "node backend/scripts/seed.js",
+    "db:reset": "npm run db:setup && npm run db:migrate && npm run db:seed",
+    "test": "jest",
+    "lint": "eslint backend/",
+    "build": "cd frontend && npm run build"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "compression": "^1.7.4",
+    "dotenv": "^16.3.1",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "express-validator": "^7.0.1",
+    "sequelize": "^6.35.2",
+    "pg": "^8.11.3",
+    "pg-hstore": "^2.3.4",
+    "ioredis": "^5.3.2",
+    "nodemailer": "^6.9.7",
+    "openai": "^4.20.1",
+    "stripe": "^14.5.0",
+    "multer": "^1.4.5-lts.1",
+    "sharp": "^0.33.0",
+    "socket.io": "^4.7.4",
+    "express-rate-limit": "^7.1.5",
+    "uuid": "^9.0.1",
+    "csv-writer": "^1.6.0",
+    "node-cron": "^3.0.3",
+    "web-push": "^3.6.6",
+    "winston": "^3.11.0",
+    "express-winston": "^4.2.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3",
+    "eslint": "^8.55.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["language-learning", "ai", "education", "nodejs", "react"],
+  "author": "LingoVerse Team",
+  "license": "MIT"
+}
