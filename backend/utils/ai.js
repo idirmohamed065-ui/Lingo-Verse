@@ -2,6 +2,18 @@ import OpenAI from 'openai';
 
 let openaiClient;
 
+// Placeholder values that indicate the key has not been configured yet.
+const PLACEHOLDER_KEYS = ['sk-placeholder', 'your_openai_api_key', 'sk-your_openai_api_key', '', 'undefined', 'null'];
+
+export const isOpenAIKeyConfigured = () => {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) return false;
+  if (PLACEHOLDER_KEYS.includes(key.trim().toLowerCase())) return false;
+  // Real OpenAI keys start with "sk-"
+  if (!key.trim().startsWith('sk-')) return false;
+  return true;
+};
+
 const getOpenAI = () => {
   if (!openaiClient) {
     openaiClient = new OpenAI({
@@ -12,6 +24,15 @@ const getOpenAI = () => {
 };
 
 export const getTutorResponse = async (messages, language, sessionType = 'conversation') => {
+  // Return a clear message when the API key is not configured, without exposing the key.
+  if (!isOpenAIKeyConfigured()) {
+    console.warn('OpenAI API key is not configured. AI Tutor is unavailable.');
+    return {
+      content: "The AI Tutor isn't configured yet. An administrator needs to add a valid OPENAI_API_KEY to the server environment before AI conversations can work. Everything else keeps working normally!",
+      usage: { total_tokens: 0 }
+    };
+  }
+
   try {
     const languageNames = {
       en: 'English', fr: 'French', es: 'Spanish', de: 'German',
@@ -53,6 +74,11 @@ export const getTutorResponse = async (messages, language, sessionType = 'conver
 };
 
 export const checkGrammar = async (text, language) => {
+  if (!isOpenAIKeyConfigured()) {
+    console.warn('OpenAI API key is not configured. Grammar check is unavailable.');
+    return { correct: true, corrected_text: text, errors: [], message: 'AI service not configured yet' };
+  }
+
   try {
     const response = await getOpenAI().chat.completions.create({
       model: 'gpt-4',
@@ -75,6 +101,11 @@ export const checkGrammar = async (text, language) => {
 };
 
 export const generateLessonContent = async (topic, language, level) => {
+  if (!isOpenAIKeyConfigured()) {
+    console.warn('OpenAI API key is not configured. Lesson generation is unavailable.');
+    return null;
+  }
+
   try {
     const response = await getOpenAI().chat.completions.create({
       model: 'gpt-4',
