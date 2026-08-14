@@ -5,6 +5,9 @@ import axios from 'axios';
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
   headers: { 'Content-Type': 'application/json' },
+  // Never let a request hang forever; prevents the loading spinner from persisting
+  // if the backend is unreachable or slow (e.g. stale accessToken + no backend).
+  timeout: 10000,
 });
 
 api.interceptors.request.use((config) => {
@@ -75,6 +78,9 @@ export const useAuthStore = create(
         } catch {
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
+        } finally {
+          // Always mark initialization complete so the loading spinner can never
+          // persist, regardless of network/backend state.
           set({ initialized: true });
         }
       },
