@@ -11,8 +11,14 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  // Guard against storage access throwing (e.g. private browsing) — never let a
+  // blocked localStorage break API requests.
+  try {
+    const token = localStorage.getItem('accessToken');
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+  } catch {
+    // ignore storage errors
+  }
   return config;
 });
 
@@ -70,18 +76,30 @@ export const useAuthStore = create(
       },
       updateUser: (updates) => set((state) => ({ user: state.user ? { ...state.user, ...updates } : null })),
       init: async () => {
-        const token = localStorage.getItem('accessToken');
-        if (!token) { set({ initialized: true }); return; }
+        // Always mark initialization complete first so the loading spinner can
+        // never persist — even if localStorage access or the /auth/me request
+        // fails (private browsing, blocked storage, backend down, etc.).
+        set({ initialized: true });
+
+        let token = null;
+        try {
+          token = localStorage.getItem('accessToken');
+        } catch {
+          token = null;
+        }
+
+        if (!token) return;
+
         try {
           const response = await api.get('/auth/me');
-          set({ user: response.data.data.user, isAuthenticated: true, initialized: true });
+          set({ user: response.data.data.user, isAuthenticated: true });
         } catch {
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-        } finally {
-          // Always mark initialization complete so the loading spinner can never
-          // persist, regardless of network/backend state.
-          set({ initialized: true });
+          try {
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+          } catch {
+            // ignore storage errors; already marked initialized
+          }
         }
       },
     }),
