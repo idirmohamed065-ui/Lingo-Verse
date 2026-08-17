@@ -7,6 +7,7 @@ import compression from 'compression';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 import { connectDatabase } from './models/index.js';
@@ -35,6 +36,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// Trust the first hop (Render/nginx proxy) so req.ip and
+// express-rate-limit see the real client X-Forwarded-For address.
+app.set('trust proxy', 1);
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
@@ -86,11 +92,15 @@ app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/achievements', achievementRoutes);
 app.use('/api/streaks', streakRoutes);
 
-// Serve frontend in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../frontend/dist')));
+// Optionally serve the built frontend if it exists (e.g. single-server deploy).
+// The API is deployed separately on Render; the frontend is on Vercel.
+// Guard with existsSync so the backend does not crash with ENOENT when
+// frontend/dist is absent in this deployment.
+const frontendDist = path.join(__dirname, '../frontend/dist');
+if (process.env.NODE_ENV === 'production' && fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
   app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+    res.sendFile(path.join(frontendDist, 'index.html'));
   });
 }
 
@@ -143,3 +153,4 @@ const startServer = async () => {
 startServer();
 
 export { io };
+
