@@ -50,7 +50,7 @@ export const getTutorResponse = async (messages, language, sessionType = 'conver
     const systemPrompt = systemPrompts[sessionType] || systemPrompts.conversation;
 
     const response = await getOpenAI().chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt },
         ...messages
