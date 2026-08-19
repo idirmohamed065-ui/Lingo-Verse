@@ -2,8 +2,16 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import axios from 'axios';
 
+// Production must never fall back to localhost. If VITE_API_URL is not set at
+// build time, use the production Render backend; localhost is only a dev fallback.
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV
+    ? 'http://localhost:5000/api'
+    : 'https://lingoverse-backend.onrender.com/api');
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
   // Never let a request hang forever; prevents the loading spinner from persisting
   // if the backend is unreachable or slow (e.g. stale accessToken + no backend).
