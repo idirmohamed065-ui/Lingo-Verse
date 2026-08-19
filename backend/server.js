@@ -41,20 +41,41 @@ const app = express();
 // express-rate-limit see the real client X-Forwarded-For address.
 app.set('trust proxy', 1);
 
+// Allowed frontend origins. Defaults cover local dev + the production Vercel
+// domain + any Vercel preview subdomain. Override with CORS_ORIGINS
+// (comma-separated) or by setting FRONTEND_URL to the exact production origin.
+const defaultOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'https://lingoverse-henna.vercel.app'
+];
+const FRONTEND_URL = process.env.FRONTEND_URL;
+const allowedOrigins = (process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',')
+  : [...defaultOrigins, ...(FRONTEND_URL ? [FRONTEND_URL] : [])]
+).map((o) => o.trim()).filter(Boolean);
+
+const corsOptions = {
+  origin(origin, callback) {
+    // Allow non-browser requests (server-to-server, Stripe webhooks, tools).
+    if (!origin) return callback(null, true);
+    // Allow the listed origins and any Vercel preview subdomain.
+    if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+};
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    credentials: true
-  }
+  cors: corsOptions
 });
 
 // Global middleware
 app.use(helmet());
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
-}));
+app.use(cors(corsOptions));
 app.use(compression());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 

@@ -1,15 +1,28 @@
 import jwt from 'jsonwebtoken';
 
+// Fail fast with a clear, operational error if JWT secrets are missing.
+// Prevents a masked 500 ("Something went wrong") during login/register.
+const requireSecret = (name) => {
+  const value = process.env[name];
+  if (!value || value.length < 16) {
+    const err = new Error(`Missing or invalid ${name} environment variable`);
+    err.statusCode = 500;
+    err.isOperational = true;
+    throw err;
+  }
+  return value;
+};
+
 export const generateTokens = (userId) => {
   const accessToken = jwt.sign(
     { userId, type: 'access' },
-    process.env.JWT_SECRET,
+    requireSecret('JWT_SECRET'),
     { expiresIn: process.env.JWT_EXPIRE || '7d' }
   );
 
   const refreshToken = jwt.sign(
     { userId, type: 'refresh' },
-    process.env.JWT_REFRESH_SECRET,
+    requireSecret('JWT_REFRESH_SECRET'),
     { expiresIn: process.env.JWT_REFRESH_EXPIRE || '30d' }
   );
 
@@ -27,7 +40,7 @@ export const verifyRefreshToken = (token) => {
 export const generateVerificationToken = (email) => {
   return jwt.sign(
     { email, type: 'verification' },
-    process.env.JWT_SECRET,
+    requireSecret('JWT_SECRET'),
     { expiresIn: '24h' }
   );
 };
@@ -35,7 +48,7 @@ export const generateVerificationToken = (email) => {
 export const generatePasswordResetToken = (userId) => {
   return jwt.sign(
     { userId, type: 'password_reset' },
-    process.env.JWT_SECRET,
+    requireSecret('JWT_SECRET'),
     { expiresIn: '1h' }
   );
 };
