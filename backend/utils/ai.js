@@ -81,7 +81,7 @@ export const checkGrammar = async (text, language) => {
 
   try {
     const response = await getOpenAI().chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -108,7 +108,7 @@ export const generateLessonContent = async (topic, language, level) => {
 
   try {
     const response = await getOpenAI().chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
