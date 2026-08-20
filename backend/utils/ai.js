@@ -5,6 +5,10 @@ let openaiClient;
 // Placeholder values that indicate the key has not been configured yet.
 const PLACEHOLDER_KEYS = ['sk-placeholder', 'your_openai_api_key', 'sk-your_openai_api_key', '', 'undefined', 'null'];
 
+// Centralized, configurable model. Override with AI_MODEL env var.
+// Defaults to a widely-available, low-cost model.
+const getModel = () => process.env.AI_MODEL || 'gpt-4o-mini';
+
 export const isOpenAIKeyConfigured = () => {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return false;
@@ -23,6 +27,53 @@ const getOpenAI = () => {
   return openaiClient;
 };
 
+// Build a clear, user-facing error message based on the OpenAI error type.
+// Prevents quota/model/config errors from being reported as generic connection errors.
+const buildAIErrorMessage = (error) => {
+  const status = error?.status;
+  const code = error?.code || error?.error?.code;
+  const type = error?.error?.type;
+
+  if (status === 429 || code === 'insufficient_quota' || type === 'insufficient_quota') {
+    return "The AI service is currently out of quota. Please try again later or contact the administrator to add more credits.";
+  }
+  if (status === 401 || code === 'invalid_api_key') {
+    return "The AI service is not configured correctly (invalid API key). Please contact the administrator.";
+  }
+  if (status === 404 || code === 'model_not_found' || /model/i.test(error?.message || '')) {
+    return "The AI model is not available. Please contact the administrator to update the AI configuration.";
+  }
+  if (status === 400 || type === 'invalid_request_error') {
+    return "The AI service rejected the request. Please try rephrasing your message.";
+  }
+  // Generic fallback
+  return "I'm having trouble connecting right now. Let's try again in a moment!";
+};
+
+// General-purpose system prompt. LingoAI answers any educational/general question,
+// and acts as a language tutor specifically for language-learning questions.
+const buildSystemPrompt = (language, sessionType = 'conversation') => {
+  const languageNames = {
+    en: 'English', fr: 'French', es: 'Spanish', de: 'German',
+    it: 'Italian', ja: 'Japanese', ko: 'Korean', zh: 'Chinese', ar: 'Arabic'
+  };
+  const langName = languageNames[language] || 'the target language';
+
+  const base = `You are LingoAI, a friendly, intelligent general-purpose AI assistant and language tutor. You can help with a wide range of topics: languages and translation, mathematics, physics, chemistry, biology, astronomy, history, geography, programming and technology, general knowledge, study help, writing and explanations, and everyday questions. Never reject a question just because it is not about languages. Give clear, useful, accurate answers and maintain conversation context.`;
+
+  const languageTutor = `When the user is practicing ${langName} or asks a language-learning question, act as an expert language tutor: correct grammar, explain mistakes clearly, adapt explanations to the learner's level, and use the target language with English translations when appropriate.`;
+
+  const sessionHints = {
+    conversation: `Keep responses concise (2-3 sentences) for casual conversation, but give fuller explanations when the user asks a substantive question.`,
+    grammar: `For grammar questions, explain rules clearly with examples and provide exercises when asked.`,
+    vocabulary: `For vocabulary, teach new words with context, example sentences, and memory techniques.`,
+    pronunciation: `For pronunciation, describe how to produce sounds, compare with similar sounds in English, and give tips for common mistakes.`,
+    quiz: `For quizzes, generate questions with multiple choice answers. Format: Question, then A) B) C) D) options. After the user answers, explain why it's correct/incorrect.`
+  };
+
+  return `${base}\n\n${languageTutor}\n\n${sessionHints[sessionType] || sessionHints.conversation}`;
+};
+
 export const getTutorResponse = async (messages, language, sessionType = 'conversation') => {
   // Return a clear message when the API key is not configured, without exposing the key.
   if (!isOpenAIKeyConfigured()) {
@@ -34,23 +85,10 @@ export const getTutorResponse = async (messages, language, sessionType = 'conver
   }
 
   try {
-    const languageNames = {
-      en: 'English', fr: 'French', es: 'Spanish', de: 'German',
-      it: 'Italian', ja: 'Japanese', ko: 'Korean', zh: 'Chinese', ar: 'Arabic'
-    };
-
-    const systemPrompts = {
-      conversation: `You are LingoAI, a friendly and encouraging language tutor for ${languageNames[language] || 'the target language'}. You help learners practice real conversations. Correct mistakes gently, explain grammar clearly, and keep responses concise (2-3 sentences max). Use the target language with English translations when appropriate.`,
-      grammar: `You are LingoAI, a grammar tutor for ${languageNames[language]}. Explain grammar rules clearly with examples. Use simple language. Provide exercises when asked.`,
-      vocabulary: `You are LingoAI, a vocabulary tutor for ${languageNames[language]}. Teach new words with context, example sentences, and memory techniques.`,
-      pronunciation: `You are LingoAI, a pronunciation coach for ${languageNames[language]}. Describe how to produce sounds, compare with similar sounds in English, and give tips for common mistakes.`,
-      quiz: `You are LingoAI, a quiz master for ${languageNames[language]}. Generate 1-question quizzes with multiple choice answers. Format: Question, then A) B) C) D) options. After user answers, explain why it's correct/incorrect.`
-    };
-
-    const systemPrompt = systemPrompts[sessionType] || systemPrompts.conversation;
+    const systemPrompt = buildSystemPrompt(language, sessionType);
 
     const response = await getOpenAI().chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: getModel(),
       messages: [
         { role: 'system', content: systemPrompt },
         ...messages
@@ -65,9 +103,9 @@ export const getTutorResponse = async (messages, language, sessionType = 'conver
     };
   } catch (error) {
     console.error('OpenAI API error:', error);
-    // Fallback response
+    // Return a clear, specific error message instead of a generic connection error.
     return {
-      content: "I'm having trouble connecting right now. Let's try again in a moment! In the meantime, can you tell me what you'd like to practice?",
+      content: buildAIErrorMessage(error),
       usage: { total_tokens: 0 }
     };
   }
@@ -81,7 +119,7 @@ export const checkGrammar = async (text, language) => {
 
   try {
     const response = await getOpenAI().chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: getModel(),
       messages: [
         {
           role: 'system',
@@ -96,7 +134,7 @@ export const checkGrammar = async (text, language) => {
     return JSON.parse(response.choices[0].message.content);
   } catch (error) {
     console.error('Grammar check error:', error);
-    return { correct: true, corrected_text: text, errors: [] };
+    return { correct: true, corrected_text: text, errors: [], message: buildAIErrorMessage(error) };
   }
 };
 
@@ -108,7 +146,7 @@ export const generateLessonContent = async (topic, language, level) => {
 
   try {
     const response = await getOpenAI().chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: getModel(),
       messages: [
         {
           role: 'system',
