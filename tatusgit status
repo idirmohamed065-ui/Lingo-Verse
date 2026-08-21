@@ -1,0 +1,10 @@
+warning: in the working copy of 'backend/routes/ai-tutor.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/utils/ai.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package-lock.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+ Lingo-Verse/Lingo-Verse    |   0
+ backend/routes/ai-tutor.js |   3 [32m+[m[31m-[m
+ backend/utils/ai.js        | 460 [32m++++++++++++++++++++++++++++++++++++++[m[31m-------[m
+ package-lock.json          | 310 [32m+++++++++++++++++++++++++++++[m[31m-[m
+ package.json               |   1 [32m+[m
+ 5 files changed, 698 insertions(+), 76 deletions(-)

@@ -1,11 +1,10 @@
 import express from 'express';
 import { body } from 'express-validator';
-import { AITutorSession, User } from '../models/index.js';
+import { AITutorSession } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { getTutorResponse, checkGrammar, generateLessonContent } from '../utils/ai.js';
-import { cacheGet, cacheSet } from '../utils/redis.js';
 
 const router = express.Router();
 
