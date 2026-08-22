@@ -160,6 +160,19 @@ export default function AIChat() {
     }
   );
 
+  // Track the last failed user message so the user can retry it.
+  const [lastFailedMessage, setLastFailedMessage] = useState(null);
+
+  const handleRetry = () => {
+    if (!lastFailedMessage || sendMessage.isLoading || !activeSession) {
+      return;
+    }
+
+    sendMessage.mutate({
+      message: lastFailedMessage
+    });
+  };
+
   const handleSend = () => {
     const trimmedMessage = message.trim();
 
@@ -175,9 +188,15 @@ export default function AIChat() {
       }
     ]);
 
-    sendMessage.mutate({
-      message: trimmedMessage
-    });
+    sendMessage.mutate(
+      {
+        message: trimmedMessage
+      },
+      {
+        onSuccess: () => setLastFailedMessage(null),
+        onError: () => setLastFailedMessage(trimmedMessage)
+      }
+    );
 
     setMessage('');
   };
@@ -372,29 +391,43 @@ export default function AIChat() {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              handleSend();
-            }
-          }}
-          placeholder="Type your message..."
-          className="flex-1 input"
-        />
+      <div className="flex flex-col gap-2">
+        {lastFailedMessage && !sendMessage.isLoading && (
+          <div className="flex items-center gap-2 text-sm text-gray-700">
+            <span>⚠️ That message failed to send.</span>
+            <button onClick={handleRetry} className="btn-secondary text-sm px-3 py-1">
+              Retry
+            </button>
+          </div>
+        )}
 
-        <button
-          onClick={handleSend}
-          disabled={
-            sendMessage.isLoading || !message.trim()
-          }
-          className="btn-primary px-4 disabled:opacity-50"
-        >
-          <Send className="w-5 h-5" />
-        </button>
+        <div className="flex gap-2 items-end">
+          <textarea
+            id="ai-tutor-message"
+            name="message"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
+            rows={1}
+            autoComplete="off"
+            className="flex-1 input resize-none min-h-[42px]"
+          />
+
+          <button
+            onClick={handleSend}
+            disabled={sendMessage.isLoading || !message.trim()}
+            className="btn-primary px-4 disabled:opacity-50"
+            aria-label="Send message"
+          >
+            <Send className="w-5 h-5" />
+          </button>
+        </div>
       </div>
     </div>
   );

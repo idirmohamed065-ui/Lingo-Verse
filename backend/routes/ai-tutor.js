@@ -1,49 +1,128 @@
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import { body } from 'express-validator';
 import { AITutorSession } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { getTutorResponse, checkGrammar, generateLessonContent } from '../utils/ai.js';
+import {
+  getTutorResponse,
+  checkGrammar,
+  generateLessonContent
+} from '../utils/ai.js';
 
 const router = express.Router();
 
+/*
+ * AI Rate Limiter
+ *
+ * Protects the Gemini API from excessive requests.
+ * The Gemini Free Tier has strict RPM/RPD limits.
+ */
+const aiRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many AI requests. Please wait a minute and try again.'
+  }
+});
+
+/*
+ * Stricter limiter for AI Tutor messages.
+ *
+ * 6 messages / minute per IP.
+ * This prevents accidental double-clicks, spam,
+ * or frontend loops from consuming Gemini quota.
+ */
+const tutorMessageRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 6,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many AI Tutor messages. Please wait a minute and try again.'
+  }
+});
+
 // Start new AI tutor session
-router.post('/sessions',
+router.post(
+  '/sessions',
   authenticate,
+  aiRateLimit,
   [
-    body('language_id').isIn(['en', 'fr', 'es', 'de', 'it', 'ja', 'ko', 'zh', 'ar']),
-    body('session_type').optional().isIn(['conversation', 'grammar', 'vocabulary', 'pronunciation', 'quiz']),
-    body('title').optional().trim().isLength({ max: 200 }),
+    body('language_id').isIn([
+      'en',
+      'fr',
+      'es',
+      'de',
+      'it',
+      'ja',
+      'ko',
+      'zh',
+      'ar'
+    ]),
+    body('session_type')
+      .optional()
+      .isIn([
+        'conversation',
+        'grammar',
+        'vocabulary',
+        'pronunciation',
+        'quiz'
+      ]),
+    body('title')
+      .optional()
+      .trim()
+      .isLength({ max: 200 }),
     validate
   ],
   async (req, res, next) => {
     try {
-      const { language_id, session_type = 'conversation', title } = req.body;
+      const {
+        language_id,
+        session_type = 'conversation',
+        title
+      } = req.body;
 
       const session = await AITutorSession.create({
         user_id: req.user.id,
         language_id,
         session_type,
-        title: title || `${session_type.charAt(0).toUpperCase() + session_type.slice(1)} Session`,
+        title:
+          title ||
+          `${session_type.charAt(0).toUpperCase()}${session_type.slice(1)} Session`,
         messages: []
       });
 
       // Generate welcome message
       const welcomeResponse = await getTutorResponse(
-        [{ role: 'user', content: 'Hello! I want to start learning.' }],
+        [
+          {
+            role: 'user',
+            content: 'Hello! I want to start learning.'
+          }
+        ],
         language_id,
         session_type
       );
 
       const messages = [
-        { role: 'assistant', content: welcomeResponse.content, timestamp: new Date() }
+        {
+          role: 'assistant',
+          content: welcomeResponse.content,
+          timestamp: new Date()
+        }
       ];
 
       await session.update({
         messages,
         total_messages: 1,
-        total_tokens_used: welcomeResponse.usage?.total_tokens || 0
+        total_tokens_used:
+          welcomeResponse.usage?.total_tokens || 0
       });
 
       res.status(201).json({
@@ -60,71 +139,152 @@ router.post('/sessions',
 );
 
 // Get user's AI tutor sessions
-router.get('/sessions', authenticate, async (req, res, next) => {
-  try {
-    const { language_id, page = 1, limit = 20 } = req.query;
-    const offset = (page - 1) * limit;
-    const where = { user_id: req.user.id };
-    if (language_id) where.language_id = language_id;
+router.get(
+  '/sessions',
+  authenticate,
+  async (req, res, next) => {
+    try {
+      const {
+        language_id,
+        page = 1,
+        limit = 20
+      } = req.query;
 
-    const { count, rows } = await AITutorSession.findAndCountAll({
-      where,
-      order: [['created_at', 'DESC']],
-      limit: parseInt(limit),
-      offset: parseInt(offset)
-    });
+      const safePage = Math.max(parseInt(page, 10) || 1, 1);
+      const safeLimit = Math.min(
+        Math.max(parseInt(limit, 10) || 20, 1),
+        50
+      );
 
-    res.json({
-      success: true,
-      data: {
-        sessions: rows,
-        pagination: { page: parseInt(page), limit: parseInt(limit), total: count, pages: Math.ceil(count / limit) }
+      const offset = (safePage - 1) * safeLimit;
+
+      const where = {
+        user_id: req.user.id
+      };
+
+      if (language_id) {
+        where.language_id = language_id;
       }
-    });
-  } catch (error) {
-    next(error);
+
+      const { count, rows } =
+        await AITutorSession.findAndCountAll({
+          where,
+          order: [['created_at', 'DESC']],
+          limit: safeLimit,
+          offset
+        });
+
+      res.json({
+        success: true,
+        data: {
+          sessions: rows,
+          pagination: {
+            page: safePage,
+            limit: safeLimit,
+            total: count,
+            pages: Math.ceil(count / safeLimit)
+          }
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 // Get specific session
-router.get('/sessions/:sessionId', authenticate, async (req, res, next) => {
-  try {
-    const { sessionId } = req.params;
-    const session = await AITutorSession.findOne({
-      where: { id: sessionId, user_id: req.user.id }
-    });
+router.get(
+  '/sessions/:sessionId',
+  authenticate,
+  async (req, res, next) => {
+    try {
+      const { sessionId } = req.params;
 
-    if (!session) throw new AppError('Session not found', 404);
+      const session = await AITutorSession.findOne({
+        where: {
+          id: sessionId,
+          user_id: req.user.id
+        }
+      });
 
-    res.json({ success: true, data: { session } });
-  } catch (error) {
-    next(error);
+      if (!session) {
+        throw new AppError('Session not found', 404);
+      }
+
+      res.json({
+        success: true,
+        data: {
+          session
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 // Send message to AI tutor
-router.post('/sessions/:sessionId/message',
+router.post(
+  '/sessions/:sessionId/message',
   authenticate,
-  [body('message').trim().isLength({ min: 1, max: 2000 }), validate],
+  tutorMessageRateLimit,
+  [
+    body('message')
+      .trim()
+      .isLength({
+        min: 1,
+        max: 2000
+      }),
+    validate
+  ],
   async (req, res, next) => {
     try {
       const { sessionId } = req.params;
       const { message } = req.body;
 
       const session = await AITutorSession.findOne({
-        where: { id: sessionId, user_id: req.user.id }
+        where: {
+          id: sessionId,
+          user_id: req.user.id
+        }
       });
 
-      if (!session) throw new AppError('Session not found', 404);
-      if (!session.is_active) throw new AppError('Session is closed', 400);
+      if (!session) {
+        throw new AppError('Session not found', 404);
+      }
 
-      // Build message history
-      const messages = session.messages || [];
-      const apiMessages = messages.map(m => ({
-        role: m.role,
-        content: m.content
-      }));
-      apiMessages.push({ role: 'user', content: message });
+      if (!session.is_active) {
+        throw new AppError('Session is closed', 400);
+      }
+
+      /*
+       * Build message history.
+       *
+       * Limit history to the most recent messages so
+       * we don't unnecessarily consume Gemini tokens.
+       */
+      const messages = Array.isArray(session.messages)
+        ? session.messages
+        : [];
+
+      const recentMessages = messages.slice(-20);
+
+      const apiMessages = recentMessages
+        .filter(
+          (m) =>
+            m &&
+            (m.role === 'user' || m.role === 'assistant') &&
+            m.content
+        )
+        .map((m) => ({
+          role: m.role,
+          content: String(m.content)
+        }));
+
+      apiMessages.push({
+        role: 'user',
+        content: message
+      });
 
       // Get AI response
       const aiResponse = await getTutorResponse(
@@ -133,24 +293,35 @@ router.post('/sessions/:sessionId/message',
         session.session_type
       );
 
-      // Update session
       const updatedMessages = [
         ...messages,
-        { role: 'user', content: message, timestamp: new Date() },
-        { role: 'assistant', content: aiResponse.content, timestamp: new Date() }
+        {
+          role: 'user',
+          content: message,
+          timestamp: new Date()
+        },
+        {
+          role: 'assistant',
+          content: aiResponse.content,
+          timestamp: new Date()
+        }
       ];
 
       await session.update({
         messages: updatedMessages,
         total_messages: updatedMessages.length,
-        total_tokens_used: (session.total_tokens_used || 0) + (aiResponse.usage?.total_tokens || 0)
+        total_tokens_used:
+          (session.total_tokens_used || 0) +
+          (aiResponse.usage?.total_tokens || 0)
       });
 
       res.json({
         success: true,
         data: {
           response: aiResponse.content,
-          session: await AITutorSession.findByPk(session.id)
+          session: await AITutorSession.findByPk(
+            session.id
+          )
         }
       });
     } catch (error) {
@@ -160,31 +331,72 @@ router.post('/sessions/:sessionId/message',
 );
 
 // Close session
-router.patch('/sessions/:sessionId/close', authenticate, async (req, res, next) => {
-  try {
-    const { sessionId } = req.params;
-    const session = await AITutorSession.findOne({
-      where: { id: sessionId, user_id: req.user.id }
-    });
-
-    if (!session) throw new AppError('Session not found', 404);
-
-    await session.update({ is_active: false, ended_at: new Date() });
-    res.json({ success: true, message: 'Session closed' });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Grammar check
-router.post('/grammar-check',
+router.patch(
+  '/sessions/:sessionId/close',
   authenticate,
-  [body('text').trim().isLength({ min: 1, max: 5000 }), body('language_id').optional().isString(), validate],
   async (req, res, next) => {
     try {
-      const { text, language_id = 'en' } = req.body;
-      const result = await checkGrammar(text, language_id);
-      res.json({ success: true, data: result });
+      const { sessionId } = req.params;
+
+      const session = await AITutorSession.findOne({
+        where: {
+          id: sessionId,
+          user_id: req.user.id
+        }
+      });
+
+      if (!session) {
+        throw new AppError('Session not found', 404);
+      }
+
+      await session.update({
+        is_active: false,
+        ended_at: new Date()
+      });
+
+      res.json({
+        success: true,
+        message: 'Session closed'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Grammar check
+router.post(
+  '/grammar-check',
+  authenticate,
+  aiRateLimit,
+  [
+    body('text')
+      .trim()
+      .isLength({
+        min: 1,
+        max: 5000
+      }),
+    body('language_id')
+      .optional()
+      .isString(),
+    validate
+  ],
+  async (req, res, next) => {
+    try {
+      const {
+        text,
+        language_id = 'en'
+      } = req.body;
+
+      const result = await checkGrammar(
+        text,
+        language_id
+      );
+
+      res.json({
+        success: true,
+        data: result
+      });
     } catch (error) {
       next(error);
     }
@@ -192,27 +404,68 @@ router.post('/grammar-check',
 );
 
 // Generate custom lesson
-router.post('/generate-lesson',
+router.post(
+  '/generate-lesson',
   authenticate,
+  aiRateLimit,
   [
-    body('topic').trim().isLength({ min: 1, max: 200 }),
-    body('language_id').isIn(['en', 'fr', 'es', 'de', 'it', 'ja', 'ko', 'zh', 'ar']),
-    body('level').optional().isIn(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']),
+    body('topic')
+      .trim()
+      .isLength({
+        min: 1,
+        max: 200
+      }),
+    body('language_id').isIn([
+      'en',
+      'fr',
+      'es',
+      'de',
+      'it',
+      'ja',
+      'ko',
+      'zh',
+      'ar'
+    ]),
+    body('level')
+      .optional()
+      .isIn([
+        'A1',
+        'A2',
+        'B1',
+        'B2',
+        'C1',
+        'C2'
+      ]),
     validate
   ],
   async (req, res, next) => {
     try {
-      const { topic, language_id, level = 'A1' } = req.body;
+      const {
+        topic,
+        language_id,
+        level = 'A1'
+      } = req.body;
 
-      // Check if premium feature
+      // Premium feature
       if (req.user.subscription_tier === 'free') {
-        throw new AppError('Premium subscription required for AI lesson generation', 403);
+        throw new AppError(
+          'Premium subscription required for AI lesson generation',
+          403
+        );
       }
 
-      const lessonContent = await generateLessonContent(topic, language_id, level);
+      const lessonContent =
+        await generateLessonContent(
+          topic,
+          language_id,
+          level
+        );
 
       if (!lessonContent) {
-        throw new AppError('Failed to generate lesson content', 500);
+        throw new AppError(
+          'Failed to generate lesson content',
+          500
+        );
       }
 
       res.json({
@@ -230,28 +483,64 @@ router.post('/generate-lesson',
   }
 );
 
-// Quick AI chat (no session persistence)
-router.post('/quick-chat',
+// Quick AI chat
+router.post(
+  '/quick-chat',
   authenticate,
+  aiRateLimit,
   [
-    body('message').trim().isLength({ min: 1, max: 2000 }),
-    body('language_id').isIn(['en', 'fr', 'es', 'de', 'it', 'ja', 'ko', 'zh', 'ar']),
-    body('session_type').optional().isIn(['conversation', 'grammar', 'vocabulary', 'pronunciation', 'quiz']),
+    body('message')
+      .trim()
+      .isLength({
+        min: 1,
+        max: 2000
+      }),
+    body('language_id').isIn([
+      'en',
+      'fr',
+      'es',
+      'de',
+      'it',
+      'ja',
+      'ko',
+      'zh',
+      'ar'
+    ]),
+    body('session_type')
+      .optional()
+      .isIn([
+        'conversation',
+        'grammar',
+        'vocabulary',
+        'pronunciation',
+        'quiz'
+      ]),
     validate
   ],
   async (req, res, next) => {
     try {
-      const { message, language_id, session_type = 'conversation' } = req.body;
+      const {
+        message,
+        language_id,
+        session_type = 'conversation'
+      } = req.body;
 
       const aiResponse = await getTutorResponse(
-        [{ role: 'user', content: message }],
+        [
+          {
+            role: 'user',
+            content: message
+          }
+        ],
         language_id,
         session_type
       );
 
       res.json({
         success: true,
-        data: { response: aiResponse.content }
+        data: {
+          response: aiResponse.content
+        }
       });
     } catch (error) {
       next(error);
