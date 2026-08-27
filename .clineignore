@@ -1,0 +1,389 @@
+# ============================================================
+# LingoVerse — Cline Ignore Rules
+# Purpose: Keep Cline context small, fast, and focused
+# ============================================================
+
+
+# ============================================================
+# 1. Dependencies
+# ============================================================
+
+node_modules/
+**/node_modules/
+
+.pnpm-store/
+.yarn/
+.yarn-cache/
+.npm/
+
+
+# ============================================================
+# 2. Git
+# ============================================================
+
+.git/
+.gitignore
+.gitattributes
+
+
+# ============================================================
+# 3. Build / Production Output
+# ============================================================
+
+dist/
+**/dist/
+
+build/
+**/build/
+
+out/
+**/out/
+
+.vite/
+**/.vite/
+
+.next/
+**/.next/
+
+.cache/
+**/.cache/
+
+
+# ============================================================
+# 4. Logs
+# ============================================================
+
+logs/
+**/logs/
+
+*.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+
+# ============================================================
+# 5. Environment / Secrets
+# ============================================================
+
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Keep example configuration visible to Cline
+!.env.example
+!**/.env.example
+
+
+# ============================================================
+# 6. Coverage / Testing Output
+# ============================================================
+
+coverage/
+**/coverage/
+
+.nyc_output/
+**/.nyc_output/
+
+test-results/
+**/test-results/
+
+playwright-report/
+**/playwright-report/
+
+blob-report/
+**/blob-report/
+
+
+# ============================================================
+# 7. Temporary Files
+# ============================================================
+
+tmp/
+temp/
+.tmp/
+.temp/
+
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*.old
+
+
+# ============================================================
+# 8. Archives / Large Binary Files
+# ============================================================
+
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+*.bz2
+*.xz
+*.iso
+
+
+# ============================================================
+# 9. Large Media
+# ============================================================
+
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+
+*.mp3
+*.wav
+*.flac
+*.aac
+*.ogg
+
+*.psd
+*.ai
+*.blend
+
+
+# ============================================================
+# 10. Images — Ignore generated / huge images
+# ============================================================
+
+*.psd
+*.tiff
+*.raw
+
+# Ignore common generated image directories
+uploads/
+**/uploads/
+
+media/
+**/media/
+
+generated/
+**/generated/
+
+
+# ============================================================
+# 11. IDE / Editor Files
+# ============================================================
+
+.vscode/
+.idea/
+*.code-workspace
+
+.history/
+**/.history/
+
+
+# ============================================================
+# 12. OS Files
+# ============================================================
+
+.DS_Store
+Thumbs.db
+desktop.ini
+
+
+# ============================================================
+# 13. Package Manager / Tool Cache
+# ============================================================
+
+.eslintcache
+.stylelintcache
+.prettiercache
+
+.turbo/
+**/.turbo/
+
+.parcel-cache/
+**/.parcel-cache/
+
+
+# ============================================================
+# 14. Vercel
+# ============================================================
+
+.vercel/
+**/.vercel/
+
+
+# ============================================================
+# 15. Render / Deployment Artifacts
+# ============================================================
+
+.render/
+**/.render/
+
+
+# ============================================================
+# 16. Database / Local Database Files
+# ============================================================
+
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+
+# ============================================================
+# 17. Redis / Cache Dumps
+# ============================================================
+
+dump.rdb
+appendonly.aof
+
+redis-data/
+**/redis-data/
+
+
+# ============================================================
+# 18. Generated Documentation
+# ============================================================
+
+docs/generated/
+**/docs/generated/
+
+typedoc/
+**/typedoc/
+
+
+# ============================================================
+# 19. Generated API / OpenAPI Output
+# ============================================================
+
+swagger-output/
+**/swagger-output/
+
+openapi-generated/
+**/openapi-generated/
+
+
+# ============================================================
+# 20. Frontend Framework Generated Files
+# ============================================================
+
+.svelte-kit/
+**/.svelte-kit/
+
+.nuxt/
+**/.nuxt/
+
+angular-cache/
+**/.angular/
+
+
+# ============================================================
+# 21. Server / Runtime Temporary Data
+# ============================================================
+
+.pids/
+*.pid
+*.seed
+
+sessions/
+**/sessions/
+
+
+# ============================================================
+# 22. AI / Model Cache
+# ============================================================
+
+.ai-cache/
+**/.ai-cache/
+
+.ai/
+**/.ai/
+
+model-cache/
+**/model-cache/
+
+
+# ============================================================
+# 23. Backup Files
+# ============================================================
+
+backup/
+backups/
+**/backup/
+**/backups/
+
+*.backup
+*.bak
+*.old
+
+
+# ============================================================
+# 24. Generated Reports
+# ============================================================
+
+reports/generated/
+**/reports/generated/
+
+reports/output/
+**/reports/output/
+
+
+# ============================================================
+# 25. LingoVerse Specific
+# ============================================================
+
+# Local frontend output
+frontend/dist/
+frontend/build/
+frontend/.vite/
+
+# Local backend output
+backend/dist/
+backend/build/
+
+# Backend logs
+backend/logs/
+
+# Frontend logs
+frontend/logs/
+
+# Local uploaded files
+backend/uploads/
+frontend/uploads/
+
+# Local generated files
+backend/generated/
+frontend/generated/
+
+# Local caches
+backend/.cache/
+frontend/.cache/
+
+
+# ============================================================
+# IMPORTANT
+# ============================================================
+
+# DO NOT ignore source code:
+# frontend/src/
+# backend/src/
+# backend/models/
+# backend/controllers/
+# backend/routes/
+# backend/middleware/
+# backend/utils/
+# frontend/components/
+# frontend/pages/
+# frontend/stores/
+
+# DO NOT ignore configuration files that Cline may need:
+# package.json
+# package-lock.json
+# vite.config.*
+# tailwind.config.*
+# tsconfig.*
+# README.md
+# .env.example

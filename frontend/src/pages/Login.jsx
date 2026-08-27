@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../stores/authStore';
+import { useAuthStore, api } from '../stores/authStore';
 import { BookOpen, Mail, Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -20,6 +20,7 @@ export default function Login() {
 
     try {
       await login(email, password);
+
       toast.success('Welcome back!');
       navigate('/dashboard');
     } catch (error) {
@@ -34,7 +35,7 @@ export default function Login() {
   const handleForgotPassword = async (e) => {
     e.preventDefault();
 
-    if (!email) {
+    if (!email.trim()) {
       toast.error('Please enter your email address first');
       return;
     }
@@ -42,28 +43,9 @@ export default function Login() {
     setResetLoading(true);
 
     try {
-      const apiUrl =
-        import.meta.env.VITE_API_URL ||
-        'http://localhost:5000/api';
-
-      const response = await fetch(
-        `${apiUrl}/auth/forgot-password`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.message || 'Failed to send reset email'
-        );
-      }
+      await api.post('/auth/forgot-password', {
+        email: email.trim(),
+      });
 
       toast.success(
         'If this email exists, a password reset link has been sent.'
@@ -72,7 +54,8 @@ export default function Login() {
       setForgotMode(false);
     } catch (error) {
       toast.error(
-        error.message || 'Failed to send reset email'
+        error.response?.data?.message ||
+        'Failed to send reset email'
       );
     } finally {
       setResetLoading(false);
@@ -89,7 +72,9 @@ export default function Login() {
           </div>
 
           <h1 className="text-2xl font-bold">
-            {forgotMode ? 'Reset your password' : 'Welcome back'}
+            {forgotMode
+              ? 'Reset your password'
+              : 'Welcome back'}
           </h1>
 
           <p className="text-gray-600 mt-1">
@@ -124,6 +109,7 @@ export default function Login() {
                       className="input pl-10"
                       placeholder="you@example.com"
                       required
+                      autoComplete="email"
                     />
                   </div>
                 </div>
@@ -145,6 +131,7 @@ export default function Login() {
                       className="input pl-10"
                       placeholder="••••••••"
                       required
+                      autoComplete="current-password"
                     />
                   </div>
                 </div>
@@ -206,6 +193,7 @@ export default function Login() {
                       className="input pl-10"
                       placeholder="you@example.com"
                       required
+                      autoComplete="email"
                     />
                   </div>
                 </div>

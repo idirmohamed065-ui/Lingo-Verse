@@ -1,38 +1,83 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import { body } from 'express-validator';
-import { User, UserStreak, Language } from '../models/index.js';
-import { generateTokens, generateVerificationToken, generatePasswordResetToken, verifyAccessToken, verifyRefreshToken } from '../utils/jwt.js';
-import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail } from '../utils/email.js';
+import { User, UserStreak } from '../models/index.js';
+import {
+  generateTokens,
+  generateVerificationToken,
+  generatePasswordResetToken,
+  verifyAccessToken,
+  verifyRefreshToken
+} from '../utils/jwt.js';
+import {
+  sendVerificationEmail,
+  sendPasswordResetEmail,
+  sendWelcomeEmail
+} from '../utils/email.js';
 import { authenticate } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { authRateLimiter } from '../middleware/rateLimiter.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { cacheSet, cacheGet, cacheDelete } from '../utils/redis.js';
+import {
+  cacheSet,
+  cacheDelete
+} from '../utils/redis.js';
 
 const router = express.Router();
 
-// Register
-router.post('/register',
+/**
+ * Register
+ */
+router.post(
+  '/register',
   authRateLimiter,
   [
-    body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
-    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
-    body('display_name').trim().isLength({ min: 2, max: 100 }).withMessage('Name must be 2-100 characters'),
-    body('language').isIn(['en', 'fr', 'es', 'de', 'it', 'ja', 'ko', 'zh', 'ar']).withMessage('Invalid language selection'),
+    body('email')
+      .isEmail()
+      .normalizeEmail()
+      .withMessage('Valid email required'),
+
+    body('password')
+      .isLength({ min: 8 })
+      .withMessage('Password must be at least 8 characters'),
+
+    body('display_name')
+      .trim()
+      .isLength({ min: 2, max: 100 })
+      .withMessage('Name must be 2-100 characters'),
+
+    body('language')
+      .isIn(['en', 'fr', 'es', 'de', 'it', 'ja', 'ko', 'zh', 'ar'])
+      .withMessage('Invalid language selection'),
+
+    body('username')
+      .optional()
+      .trim()
+      .isLength({ min: 3, max: 50 })
+      .withMessage('Username must be 3-50 characters'),
+
     validate
   ],
   async (req, res, next) => {
     try {
-      const { email, password, display_name, language, username } = req.body;
+      const {
+        email,
+        password,
+        display_name,
+        language,
+        username
+      } = req.body;
 
-      const existingUser = await User.findOne({ where: { email } });
+      const existingUser = await User.findOne({
+        where: { email }
+      });
+
       if (existingUser) {
         throw new AppError('Email already registered', 409);
       }
 
       const password_hash = await bcrypt.hash(password, 12);
-      // Generate verification token BEFORE user creation
+
       const verificationToken = generateVerificationToken(email);
 
       const user = await User.create({
@@ -45,10 +90,12 @@ router.post('/register',
         account_status: 'pending_verification'
       });
 
-      // Send verification email
-      await sendVerificationEmail(email, verificationToken, display_name);
+      await sendVerificationEmail(
+        email,
+        verificationToken,
+        display_name
+      );
 
-      // Create initial streak record
       await UserStreak.create({
         user_id: user.id,
         streak_date: new Date().toISOString().split('T')[0],
@@ -69,7 +116,10 @@ router.post('/register',
             role: user.role,
             account_status: user.account_status
           },
-          tokens: { accessToken, refreshToken }
+          tokens: {
+            accessToken,
+            refreshToken
+          }
         }
       });
     } catch (error) {
@@ -78,24 +128,41 @@ router.post('/register',
   }
 );
 
-// Login
-router.post('/login',
+/**
+ * Login
+ */
+router.post(
+  '/login',
   authRateLimiter,
   [
-    body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
-    body('password').notEmpty().withMessage('Password required'),
+    body('email')
+      .isEmail()
+      .normalizeEmail()
+      .withMessage('Valid email required'),
+
+    body('password')
+      .notEmpty()
+      .withMessage('Password required'),
+
     validate
   ],
   async (req, res, next) => {
     try {
       const { email, password } = req.body;
 
-      const user = await User.findOne({ where: { email } });
+      const user = await User.findOne({
+        where: { email }
+      });
+
       if (!user) {
         throw new AppError('Invalid credentials', 401);
       }
 
-      const isValid = await bcrypt.compare(password, user.password_hash);
+      const isValid = await bcrypt.compare(
+        password,
+        user.password_hash
+      );
+
       if (!isValid) {
         throw new AppError('Invalid credentials', 401);
       }
@@ -104,43 +171,67 @@ router.post('/login',
         throw new AppError('Account suspended', 403);
       }
 
-      // Update login info
+      if (user.account_status === 'deactivated') {
+        throw new AppError('Account deactivated', 403);
+      }
+
       await user.update({
         login_count: user.login_count + 1,
         last_login_at: new Date(),
         last_login_ip: req.ip
       });
 
-      // Check and update streak
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date()
+        .toISOString()
+        .split('T')[0];
+
       const lastActivity = user.last_activity_date;
 
       if (lastActivity) {
         const lastDate = new Date(lastActivity);
         const todayDate = new Date(today);
-        const diffDays = Math.floor((todayDate - lastDate) / (1000 * 60 * 60 * 24));
+
+        const diffDays = Math.floor(
+          (todayDate - lastDate) /
+          (1000 * 60 * 60 * 24)
+        );
 
         if (diffDays === 1) {
-          await user.update({ current_streak: user.current_streak + 1 });
-          if (user.current_streak + 1 > user.longest_streak) {
-            await user.update({ longest_streak: user.current_streak + 1 });
-          }
+          const newStreak = user.current_streak + 1;
+
+          await user.update({
+            current_streak: newStreak,
+            longest_streak: Math.max(
+              newStreak,
+              user.longest_streak
+            )
+          });
         } else if (diffDays > 1) {
-          await user.update({ current_streak: 1 });
+          await user.update({
+            current_streak: 1
+          });
         }
       }
 
-      await user.update({ last_activity_date: today });
+      await user.update({
+        last_activity_date: today
+      });
 
-      const { accessToken, refreshToken } = generateTokens(user.id);
+      const {
+        accessToken,
+        refreshToken
+      } = generateTokens(user.id);
 
-      // Cache user session
-      await cacheSet(`session:${user.id}`, {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        display_name: user.display_name
-      }, 86400);
+      await cacheSet(
+        `session:${user.id}`,
+        {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          display_name: user.display_name
+        },
+        86400
+      );
 
       res.json({
         success: true,
@@ -164,7 +255,10 @@ router.post('/login',
             account_status: user.account_status,
             email_verified: user.email_verified
           },
-          tokens: { accessToken, refreshToken }
+          tokens: {
+            accessToken,
+            refreshToken
+          }
         }
       });
     } catch (error) {
@@ -173,95 +267,53 @@ router.post('/login',
   }
 );
 
-// Refresh token
-router.post('/refresh', async (req, res, next) => {
-  try {
-    const { refreshToken } = req.body;
-    if (!refreshToken) {
-      throw new AppError('Refresh token required', 401);
-    }
-
-    const decoded = verifyRefreshToken(refreshToken);
-    if (decoded.type !== 'refresh') {
-      throw new AppError('Invalid token type', 401);
-    }
-
-    const user = await User.findByPk(decoded.userId);
-    if (!user || user.account_status !== 'active') {
-      throw new AppError('User not found or inactive', 401);
-    }
-
-    const tokens = generateTokens(user.id);
-
-    res.json({
-      success: true,
-      data: { tokens }
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Verify email
-router.get('/verify-email', async (req, res, next) => {
-  try {
-    const { token } = req.query;
-    if (!token) {
-      throw new AppError('Verification token required', 400);
-    }
-
-    const decoded = verifyAccessToken(token);
-    const user = await User.findOne({ where: { email: decoded.email } });
-
-    if (!user || user.email_verification_token !== token) {
-      throw new AppError('Invalid or expired token', 400);
-    }
-
-    await user.update({
-      email_verified: true,
-      account_status: 'active',
-      email_verification_token: null
-    });
-
-    await sendWelcomeEmail(user.email, user.display_name);
-
-    res.json({
-      success: true,
-      message: 'Email verified successfully'
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Forgot password
-router.post('/forgot-password',
+/**
+ * Refresh token
+ */
+router.post(
+  '/refresh',
   authRateLimiter,
-  [body('email').isEmail().normalizeEmail(), validate],
   async (req, res, next) => {
     try {
-      const { email } = req.body;
-      const user = await User.findOne({ where: { email } });
+      const { refreshToken } = req.body;
 
-      if (!user) {
-        // Don't reveal if email exists
-        return res.json({
-          success: true,
-          message: 'If an account exists, a reset email has been sent'
-        });
+      if (!refreshToken) {
+        throw new AppError(
+          'Refresh token required',
+          401
+        );
       }
 
-      const resetToken = generatePasswordResetToken(user.id);
-      await user.update({
-        password_reset_token: resetToken,
-        password_reset_expires: new Date(Date.now() + 3600000) // 1 hour
-      });
+      const decoded = verifyRefreshToken(refreshToken);
 
-      await sendPasswordResetEmail(email, resetToken, user.display_name);
+      if (decoded.type !== 'refresh') {
+        throw new AppError(
+          'Invalid token type',
+          401
+        );
+      }
+
+      const user = await User.findByPk(
+        decoded.userId
+      );
+
+      if (
+        !user ||
+        user.account_status !== 'active'
+      ) {
+        throw new AppError(
+          'User not found or inactive',
+          401
+        );
+      }
+
+      const tokens = generateTokens(user.id);
 
       res.json({
         success: true,
-        message: 'If an account exists, a reset email has been sent'
+        data: {
+          tokens
+        }
       });
     } catch (error) {
       next(error);
@@ -269,35 +321,199 @@ router.post('/forgot-password',
   }
 );
 
-// Reset password
-router.post('/reset-password',
+/**
+ * Verify email
+ */
+router.get(
+  '/verify-email',
+  authRateLimiter,
+  async (req, res, next) => {
+    try {
+      const { token } = req.query;
+
+      if (!token || typeof token !== 'string') {
+        throw new AppError(
+          'Verification token required',
+          400
+        );
+      }
+
+      const decoded = verifyAccessToken(token);
+
+      if (!decoded.email) {
+        throw new AppError(
+          'Invalid verification token',
+          400
+        );
+      }
+
+      const user = await User.findOne({
+        where: {
+          email: decoded.email
+        }
+      });
+
+      if (
+        !user ||
+        user.email_verification_token !== token
+      ) {
+        throw new AppError(
+          'Invalid or expired token',
+          400
+        );
+      }
+
+      await user.update({
+        email_verified: true,
+        account_status: 'active',
+        email_verification_token: null
+      });
+
+      await sendWelcomeEmail(
+        user.email,
+        user.display_name
+      );
+
+      res.json({
+        success: true,
+        message: 'Email verified successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * Forgot password
+ */
+router.post(
+  '/forgot-password',
   authRateLimiter,
   [
-    body('token').notEmpty(),
-    body('password').isLength({ min: 8 }),
+    body('email')
+      .isEmail()
+      .normalizeEmail()
+      .withMessage('Valid email required'),
+
     validate
   ],
   async (req, res, next) => {
     try {
-      const { token, password } = req.body;
+      const { email } = req.body;
 
-      const decoded = verifyAccessToken(token);
-      const user = await User.findByPk(decoded.userId);
+      const user = await User.findOne({
+        where: { email }
+      });
 
-      if (!user || user.password_reset_token !== token || new Date() > user.password_reset_expires) {
-        throw new AppError('Invalid or expired reset token', 400);
+      // Prevent account enumeration
+      if (!user) {
+        return res.json({
+          success: true,
+          message:
+            'If an account exists, a reset email has been sent'
+        });
       }
 
-      const password_hash = await bcrypt.hash(password, 12);
+      const resetToken =
+        generatePasswordResetToken(user.id);
+
+      await user.update({
+        password_reset_token: resetToken,
+        password_reset_expires:
+          new Date(Date.now() + 3600000)
+      });
+
+      await sendPasswordResetEmail(
+        email,
+        resetToken,
+        user.display_name
+      );
+
+      res.json({
+        success: true,
+        message:
+          'If an account exists, a reset email has been sent'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * Reset password
+ */
+router.post(
+  '/reset-password',
+  authRateLimiter,
+  [
+    body('token')
+      .notEmpty()
+      .withMessage('Reset token required'),
+
+    body('password')
+      .isLength({ min: 8 })
+      .withMessage(
+        'Password must be at least 8 characters'
+      ),
+
+    validate
+  ],
+  async (req, res, next) => {
+    try {
+      const {
+        token,
+        password
+      } = req.body;
+
+      const decoded = verifyAccessToken(token);
+
+      if (!decoded.userId) {
+        throw new AppError(
+          'Invalid reset token',
+          400
+        );
+      }
+
+      const user = await User.findByPk(
+        decoded.userId
+      );
+
+      const resetExpired =
+        !user?.password_reset_expires ||
+        new Date() >
+          new Date(user.password_reset_expires);
+
+      if (
+        !user ||
+        user.password_reset_token !== token ||
+        resetExpired
+      ) {
+        throw new AppError(
+          'Invalid or expired reset token',
+          400
+        );
+      }
+
+      const password_hash =
+        await bcrypt.hash(password, 12);
+
       await user.update({
         password_hash,
         password_reset_token: null,
         password_reset_expires: null
       });
 
+      // Invalidate cached session after password change
+      await cacheDelete(
+        `session:${user.id}`
+      );
+
       res.json({
         success: true,
-        message: 'Password reset successfully'
+        message:
+          'Password reset successfully'
       });
     } catch (error) {
       next(error);
@@ -305,23 +521,42 @@ router.post('/reset-password',
   }
 );
 
-// Get current user
-router.get('/me', authenticate, async (req, res) => {
-  res.json({
-    success: true,
-    data: { user: req.user }
-  });
-});
+/**
+ * Get current user
+ */
+router.get(
+  '/me',
+  authenticate,
+  async (req, res) => {
+    res.json({
+      success: true,
+      data: {
+        user: req.user
+      }
+    });
+  }
+);
 
-// Logout
-router.post('/logout', authenticate, async (req, res) => {
-  // Invalidate cache
-  await cacheDelete(`session:${req.user.id}`);
+/**
+ * Logout
+ */
+router.post(
+  '/logout',
+  authenticate,
+  async (req, res, next) => {
+    try {
+      await cacheDelete(
+        `session:${req.user.id}`
+      );
 
-  res.json({
-    success: true,
-    message: 'Logged out successfully'
-  });
-});
+      res.json({
+        success: true,
+        message: 'Logged out successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 export default router;

@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+[import jwt from 'jsonwebtoken';
 import { User } from '../models/index.js';
 import { AppError } from './errorHandler.js';
 
@@ -113,4 +113,4 @@ export const authorize = (...roles) => {
 
     next();
   };
-};
+};]
